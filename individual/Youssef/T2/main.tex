@@ -1,0 +1,80 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{booktabs,cite,graphicx,xcolor,amsmath}
+\input{generated_tables}
+\begin{document}
+\title{Evaluating Qwen3-ASR-1.7B for Speech-to-Text:\\Architecture, Pipeline and Empirical Study}
+
+\maketitle
+
+\begin{abstract}
+Qwen3-ASR-1.7B is an open-source speech recognizer that pairs a separately pretrained AuT audio encoder with a Qwen3-1.7B language model. We summarize its architecture, feature extraction, training recipe and language coverage, then run it on \nfiles{} recordings (\totaldur{} s) that vary in speaker, accent, noise, language and duration. On a \hwname{} GPU in half precision, the model reaches a pooled WER of \poolwer\% and CER of \poolcer\% with a mean real-time factor (RTF) of \meanrtf{} and a peak memory use of \vrampeak{} GiB. Most remaining errors come from disfluencies, contractions and reference conventions rather than from acoustic confusion. We discuss limitations and improvements.
+\end{abstract}
+\begin{IEEEkeywords}Automatic speech recognition, Qwen3-ASR, audio language model, WER, CER\end{IEEEkeywords}
+
+\section{Introduction}
+Conventional speech recognizers use CTC, RNN-T or attention encoder-decoder designs, such as Whisper~\cite{whisper}. Large audio-language models take a different route: speech embeddings are given to a decoder-only LLM that writes the transcript. Qwen3-ASR~\cite{qwen3asr} follows this route and is released in 1.7B and 0.6B sizes, with language identification for 52 languages and dialects. This paper (i) explains the design of the 1.7B model and (ii) reports a small, reproducible measurement of its accuracy and efficiency.
+
+\section{Architecture Analysis}
+\subsection{Audio Processing and Encoder}
+Audio is converted to 128-dimensional Fbank features at 100\,Hz. The AuT encoder, an attention encoder-decoder model pretrained for ASR, downsamples the sequence by $8\times$, giving 12.5 frames per second (80\,ms each)~\cite{qwen3asr,qwen3omni}. In the 1.7B model the encoder has about 300M parameters (hidden size 1024). Dynamic attention windows of roughly 1--8\,s allow a single model to serve both offline and streaming use~\cite{qwen3asr}.
+\subsection{Decoder and Tokenization}
+A projector maps encoder outputs to the embedding space of Qwen3-1.7B, which generates text token by token with the Qwen subword tokenizer. The output starts with a language tag and then the transcript, so language identification and recognition happen in one pass~\cite{qwen3asr}. Text is produced with casing and punctuation, which matters for evaluation (Section~\ref{sec:res}).
+\subsection{Training and Coverage}
+Training has four stages~\cite{qwen3asr}: (1) AuT pretraining on about 40M hours of pseudo-labeled speech; (2) Omni pretraining on multimodal data; (3) supervised fine-tuning for ASR; (4) reinforcement learning. The model supports 30 languages plus 22 Chinese dialects, several English accents, and singing voice. The smaller 0.6B variant is reported to reach 92\,ms time-to-first-token and high throughput under vLLM; we did not re-measure this.
+
+\section{Experimental Setup}
+\textbf{Platform.} Google Colab, one \hwname{} GPU (16\,GB), PyTorch with the official \texttt{qwen-asr} package (transformers backend). The T4 lacks native bfloat16, so the model ran in float16.
+\textbf{Data.} Ten clips (Table~\ref{tab:clips}), streamed through the Hugging Face \texttt{datasets} library: LibriSpeech~\cite{librispeech} test-clean and test-other, a LibriSpeech clip with synthetic white noise at 10\,dB SNR, a 126\,s clip made by concatenating consecutive utterances of one speaker, one Arabic (Egypt) utterance from FLEURS~\cite{fleurs}, and three conversational English clips from EdAcc~\cite{edacc} with different speaker accents. Ground truth is the corpus transcript.
+\textbf{Metrics.} WER and CER with \texttt{jiwer}, after lowercasing and removing punctuation; no filler or contraction handling. Latency is the median of three runs after one warm-up; RTF is latency divided by audio duration. Memory comes from \texttt{torch.cuda}.
+
+\begin{table}[t]\centering\caption{Test clips.}\label{tab:clips}\scriptsize
+\begin{tabular}{@{}llll@{}}\toprule
+ID & Source & Speaker/accent & Style\\\midrule
+A1--A2 & LibriSpeech clean & US, spk.\ 6930 & read, 4/14\,s\\
+A3--A4 & LibriSpeech other & spk.\ 7902 & read, 2/3\,s\\
+A5 & Clean + white noise & spk.\ 6930 & 10\,dB SNR, 5\,s\\
+A6 & LibriSpeech concat. & spk.\ 6930 & read, 126\,s\\
+A7 & FLEURS & Arabic (Egypt) & read, 8\,s\\
+A8 & EdAcc & Southern British & conv., 8\,s\\
+A9 & EdAcc & Mainstream US & conv., 4\,s\\
+A10 & EdAcc & European & conv., 8\,s\\\bottomrule
+\end{tabular}\end{table}
+
+\section{Implementation}
+The model was installed with \texttt{pip install qwen-asr} and loaded via \texttt{Qwen3ASRModel.from\_pretrained("Qwen/Qwen3-ASR-1.7B", dtype=torch.float16, device\_map="cuda:0")}. Inference is a call to \texttt{model.transcribe(audio=path, language=None)}, which returns the detected language and text~\cite{qwen3asrgh}. Loading took \loadtime\,s, including the first download; the weights use \vramload\,GiB and peak use was \vrampeak\,GiB. All scripts used to produce the tables are written so that the tables are generated directly from the logged results.
+
+\section{Results and Discussion}\label{sec:res}
+\begin{table}[t]\centering\caption{Per-clip results. Lat = latency, WER/CER in \%.}\label{tab:res}\scriptsize
+\resizebox{\columnwidth}{!}{\resultstable}\end{table}
+
+\textbf{Accuracy.} Pooled WER is \poolwer\% and CER \poolcer\% (Table~\ref{tab:res}); because the 126\,s clip holds most of the words, the pooled figure reflects read English most. Five clips had zero errors (A1, A2, A4, A5, A10), including the noisy clip, so 10\,dB white noise was too mild to hurt this model. The long clip reached 1.5\% WER; the one clear recognition error there is ``voted'' for ``forwarded''.
+
+\textbf{Error analysis.} Inspection of the reference/hypothesis pairs shows that many errors are not acoustic. A3 (11.1\%) is only ``I am'' versus ``I'm''. On EdAcc the model omits fillers such as ``uh'' that the references contain, which explains A9 (7.1\%) and part of A8 (9.5\%); the remaining A8 difference is ``pub golf'' (output) versus ``club golf'' (reference), where the output seems more plausible. The Arabic clip (A7: WER 13.3\%, CER 4.0\%) differs from the reference by diacritics (the reference is vocalized, the output is not) and one spelling variant of a number word. Hence the raw scores in Table~\ref{tab:res} overstate the true error rate for casual speech and for Arabic, and normalization (filler removal, contraction expansion, diacritic stripping) is needed for a fair comparison. Examples are shown in Table~\ref{tab:io}.
+
+\begin{table}[t]\centering\caption{Selected input/output examples (reference $\rightarrow$ output).}\label{tab:io}\scriptsize
+\begin{tabular}{@{}p{0.5cm}p{3.1cm}p{3.1cm}@{}}\toprule
+ID & Reference & Model output\\\midrule
+A3 & I AM FROM THE CUTTER LYING OFF THE COAST & I'm from the cutter lying off the coast.\\
+A8 & \ldots SO UH WOULD YOU RATHER GO TO THE BEACH TODAY OR DO CLUB GOLF & \ldots So, would you rather go to the beach today or do pub golf?\\
+A9 & IS THAT UH I MEAN REALISTICALLY \ldots & Is that? I mean, realistically, \ldots\\\bottomrule
+\end{tabular}\end{table}
+
+\textbf{Speed and resources.} The mean RTF of \meanrtf{} means the T4 transcribes about five times faster than real time. RTF is higher for very short clips (about 0.21 on average below 10\,s, against 0.15 above 10\,s; the A3--A4 pair reached 0.25--0.34), consistent with a fixed per-call overhead. The 126\,s clip needed 18.8\,s with no failure or truncation. Peak memory of \vrampeak\,GiB leaves plenty of room on a 16\,GB card, so batching or a larger backend could be used.
+
+\textbf{Limitations.} With ten clips and only a few speakers, differences between single clips (for example the 0\% on the European-accent clip) are anecdotal. Latency was measured with the transformers backend on a T4 without FlashAttention, so it is not representative of production serving. Only one non-English utterance was tested, and no second model was compared. Reference conventions differ between corpora, so scores are not strictly comparable across sources.
+
+\textbf{Possible improvements.} (i) Apply a shared text normalizer before scoring. (ii) Use a vLLM backend and an Ampere-class GPU for faster inference. (iii) Test harder noise (0\,dB, real environments), more speakers and more languages. (iv) Compare with the 0.6B model and with Whisper under the same protocol.
+
+\section{Conclusion}
+Qwen3-ASR-1.7B combines an AuT encoder with an LLM decoder in a single pipeline. In our small experiment on a Tesla T4 it produced near-perfect transcripts of read English, handled a two-minute clip, and ran at about \meanrtf{} RTF within \vrampeak\,GiB. Its remaining ``errors'' mostly reflect disfluency removal, punctuation-style conventions and reference mismatches, so careful normalization is as important as the model when comparing results.
+
+\begin{thebibliography}{1}
+\bibitem{qwen3asr} X. Shi \emph{et al.}, ``Qwen3-ASR technical report,'' arXiv:2601.21337, 2026.
+\bibitem{qwen3omni} J. Xu \emph{et al.}, ``Qwen3-Omni technical report,'' arXiv:2509.17765, 2025.
+\bibitem{whisper} A. Radford \emph{et al.}, ``Robust speech recognition via large-scale weak supervision,'' in \emph{Proc. ICML}, 2023.
+\bibitem{librispeech} V. Panayotov, G. Chen, D. Povey, and S. Khudanpur, ``LibriSpeech: An ASR corpus based on public domain audio books,'' in \emph{Proc. ICASSP}, 2015.
+\bibitem{fleurs} A. Conneau \emph{et al.}, ``FLEURS: Few-shot learning evaluation of universal representations of speech,'' in \emph{Proc. IEEE SLT}, 2022.
+\bibitem{edacc} R. Sanabria \emph{et al.}, ``The Edinburgh International Accents of English Corpus,'' in \emph{Proc. ICASSP}, 2023.
+\bibitem{qwen3asrgh} Qwen Team, ``Qwen3-ASR,'' GitHub: QwenLM/Qwen3-ASR; Hugging Face: Qwen/Qwen3-ASR-1.7B.
+\end{thebibliography}
+\end{document}
