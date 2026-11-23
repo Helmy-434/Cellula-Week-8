@@ -1,0 +1,30 @@
+\newcommand{\hwname}{Tesla T4}
+\newcommand{\loadtime}{60.3}
+\newcommand{\vramload}{3.80}
+\newcommand{\vrampeak}{4.73}
+\newcommand{\poolwer}{2.19}
+\newcommand{\poolcer}{0.93}
+\newcommand{\nfiles}{10}
+\newcommand{\totaldur}{181.8}
+\newcommand{\meanrtf}{0.197}
+\newcommand{\resultstable}{%
+\begin{tabular}{@{}llrrrrr@{}}\toprule
+ID & Condition & Dur(s) & Lat(s) & RTF & WER & CER\\\midrule
+A1 & LibriSpeech clean ~4s & 3.5 & 0.53 & 0.152 & 0.0 & 0.0\\
+A2 & LibriSpeech clean ~14s & 14.2 & 2.21 & 0.155 & 0.0 & 0.0\\
+A3 & LibriSpeech other ~2s & 2.1 & 0.52 & 0.246 & 11.1 & 2.5\\
+A4 & LibriSpeech other ~3s & 2.5 & 0.85 & 0.338 & 0.0 & 0.0\\
+A5 & white noise 10 dB SNR ~5s & 5.0 & 0.62 & 0.123 & 0.0 & 0.0\\
+A6 & long-form concat ~126s & 125.9 & 18.78 & 0.149 & 1.5 & 0.6\\
+A7 & FLEURS ~8s & 8.2 & 1.84 & 0.226 & 13.3 & 4.0\\
+A8 & EdAcc conversational ~8s & 8.3 & 1.17 & 0.140 & 9.5 & 4.8\\
+A9 & EdAcc conversational ~4s & 4.2 & 0.98 & 0.234 & 7.1 & 4.4\\
+A10 & EdAcc conversational ~8s & 7.9 & 1.63 & 0.206 & 0.0 & 0.0\\
+\bottomrule\end{tabular}}
+\newcommand{\iotable}{%
+\begin{tabular}{@{}p{0.4cm}p{3.0cm}p{3.0cm}@{}}\toprule
+ID & Reference & Model output\\\midrule
+A1 & CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS & Concord returned to its place amidst the tents.\\
+A2 & THE ENGLISH FORWARDED TO THE FRENCH BASKETS OF FLOWERS OF WHICH THEY HAD MADE A PLENTIFUL  & The English forwarded to the French baskets of flowers, of which they had made a plentiful\\
+A3 & I AM FROM THE CUTTER LYING OFF THE COAST & I'm from the cutter lying off the coast.\\
+\bottomrule\end{tabular}}
